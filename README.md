@@ -13,7 +13,7 @@ An interactive, grid-based ecosystem placement puzzle and simulation game built 
 2. **Wolf Hunting & Starvation**:
    - Each alive wolf hunts the closest alive sheep *not already targeted by another wolf*.
    - When a wolf reaches a sheep's cell, the sheep is eaten immediately, leaving only the wolf.
-   - If a wolf does not eat for 4 consecutive weeks, it starves and perishes.
+   - If a wolf does not eat for 3 consecutive weeks, it starves and perishes.
    - Wolves avoid moving into cells occupied by other wolves.
 
 3. **Sheep Grazing & Reproduction**:
