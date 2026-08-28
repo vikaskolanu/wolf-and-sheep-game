@@ -1,13 +1,15 @@
-import React from 'react';
-import { X, Trophy, CheckCircle, Award, User, Star } from 'lucide-react';
-import { PlayerProfile } from '../core/types';
+import React, { useState } from 'react';
+import { X, Trophy, User, Medal, Calendar } from 'lucide-react';
+import { PlayerProfile, LeaderboardEntry } from '../core/types';
 import { GAME_LEVELS } from '../data/levels';
+import { getGlobalLeaderboard } from '../core/storage';
 
 interface LeaderboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: PlayerProfile | null;
   onEditName: () => void;
+  initialLevelId?: number;
 }
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
@@ -15,41 +17,51 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onClose,
   profile,
   onEditName,
+  initialLevelId = 1,
 }) => {
+  const [selectedLevelId, setSelectedLevelId] = useState(initialLevelId);
+
   if (!isOpen) return null;
 
-  const completedCount = profile?.completedLevels.length ?? 0;
-  const totalLevels = GAME_LEVELS.length;
-  const totalSheepSaved = profile
-    ? Object.values(profile.levelScores).reduce((sum, score) => sum + score.highestSheep, 0)
-    : 0;
+  const globalBoard = getGlobalLeaderboard();
+  const selectedLevelConfig = GAME_LEVELS.find(l => l.id === selectedLevelId) || GAME_LEVELS[0];
+  const entries: LeaderboardEntry[] = (globalBoard[selectedLevelId] || []).sort(
+    (a, b) => b.sheepAlive - a.sheepAlive
+  );
+
+  const getRankBadge = (idx: number) => {
+    if (idx === 0) return <span className="text-base">🥇</span>;
+    if (idx === 1) return <span className="text-base">🥈</span>;
+    if (idx === 2) return <span className="text-base">🥉</span>;
+    return <span className="font-mono text-slate-400 font-bold text-xs">#{idx + 1}</span>;
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#182327] border border-[#2e4149] rounded-2xl shadow-2xl overflow-hidden p-6 max-h-[90vh] flex flex-col text-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="relative w-full max-w-xl bg-[#182327] border border-[#2e4149] rounded-2xl shadow-2xl overflow-hidden p-4 sm:p-6 max-h-[92vh] flex flex-col text-slate-200">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-700/80 mb-3.5">
           <div className="flex items-center gap-2.5">
             <Trophy className="w-5 h-5 text-amber-400" />
-            <h3 className="text-lg font-bold text-white">Reserve Records & High Scores</h3>
+            <h3 className="text-base sm:text-lg font-bold text-white">Global Player Leaderboard</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Player Profile Summary */}
-        <div className="flex items-center justify-between bg-[#12191c] p-3.5 rounded-xl border border-slate-800 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-lime-500/20 border border-lime-400 flex items-center justify-center text-lime-400 font-bold text-base">
+        {/* Current Player Bar */}
+        <div className="flex items-center justify-between bg-[#12191c] px-3.5 py-2.5 rounded-xl border border-slate-800 mb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-lime-500/20 border border-lime-400 flex items-center justify-center text-lime-400 font-bold text-xs">
               {profile?.name ? profile.name[0].toUpperCase() : 'P'}
             </div>
             <div>
-              <span className="text-xs text-slate-400 block">Manager</span>
-              <span className="text-sm font-bold text-white">{profile?.name || 'Anonymous'}</span>
+              <span className="text-[10px] text-slate-400 block uppercase font-mono tracking-wider">Active Player</span>
+              <span className="text-xs sm:text-sm font-bold text-white">{profile?.name || 'Player'}</span>
             </div>
           </div>
 
@@ -58,95 +70,117 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
               onClose();
               onEditName();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 bg-[#1e2b30] hover:bg-[#283940] border border-slate-700 transition-all"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 bg-[#1e2b30] hover:bg-[#283940] border border-slate-700 transition-all"
           >
-            <User className="w-3.5 h-3.5 text-lime-400" />
-            <span>Edit Name</span>
+            <User className="w-3 h-3 text-lime-400" />
+            <span>Change Name</span>
           </button>
         </div>
 
-        {/* Global Statistics */}
-        <div className="grid grid-cols-2 gap-3 mb-4 text-xs font-mono">
-          <div className="bg-[#131b1e] p-3 rounded-lg border border-slate-800 flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-lime-400 shrink-0" />
-            <div>
-              <span className="text-slate-400 block text-[10px]">Levels Mastered</span>
-              <span className="text-white font-bold text-sm">
-                {completedCount} / {totalLevels}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-[#131b1e] p-3 rounded-lg border border-slate-800 flex items-center gap-3">
-            <Award className="w-5 h-5 text-sky-400 shrink-0" />
-            <div>
-              <span className="text-slate-400 block text-[10px]">Total Sheep Saved</span>
-              <span className="text-sky-300 font-bold text-sm">🐑 {totalSheepSaved}</span>
-            </div>
+        {/* Level Tabs Selector (Horizontal scrollable) */}
+        <div className="mb-3">
+          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1.5">
+            Select Level
+          </span>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
+            {GAME_LEVELS.map(lvl => (
+              <button
+                key={lvl.id}
+                onClick={() => setSelectedLevelId(lvl.id)}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-lg shrink-0 transition-all ${
+                  selectedLevelId === lvl.id
+                    ? 'bg-lime-600 text-black font-bold shadow-md shadow-lime-950/40'
+                    : 'bg-[#121a1d] text-slate-400 hover:text-slate-200 border border-slate-800'
+                }`}
+              >
+                Lvl {lvl.id} ({lvl.gridRows}×{lvl.gridCols})
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Level By Level Breakdown */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-2 mb-4">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-            Level High Scores (Surviving Sheep)
-          </span>
+        {/* Selected Level Summary Header */}
+        <div className="bg-[#141d21] p-3 rounded-xl border border-slate-800/80 mb-3 flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-white block">
+              {selectedLevelConfig.title}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              {selectedLevelConfig.targetWeeks} weeks · {selectedLevelConfig.budgets.wolves} wolves · {selectedLevelConfig.gridRows}×{selectedLevelConfig.gridCols} grid
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Top Score</span>
+            <span className="text-xs sm:text-sm font-mono font-bold text-lime-400">
+              {entries.length > 0 ? `${entries[0].sheepAlive} 🐑` : 'None yet'}
+            </span>
+          </div>
+        </div>
 
-          {GAME_LEVELS.map(lvl => {
-            const isCompleted = profile?.completedLevels.includes(lvl.id) ?? false;
-            const score = profile?.levelScores[lvl.id];
+        {/* Leaderboard Table / Rankings */}
+        <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 min-h-[180px]">
+          {entries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-slate-500 text-xs">
+              <Medal className="w-8 h-8 text-slate-600 mb-2 opacity-50" />
+              <span>No scores recorded yet for this level. Be the first to win!</span>
+            </div>
+          ) : (
+            entries.map((entry, idx) => {
+              const isCurrentPlayer = entry.playerName.toLowerCase() === (profile?.name || '').toLowerCase();
 
-            return (
-              <div
-                key={lvl.id}
-                className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
-                  isCompleted
-                    ? 'bg-[#1a252a] border-lime-500/30'
-                    : 'bg-[#12191c] border-slate-800/80 opacity-70'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                      isCompleted ? 'bg-lime-500 text-black' : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {isCompleted ? '✓' : lvl.id}
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold text-white block">
-                      Level {lvl.id} ({lvl.gridRows}×{lvl.gridCols})
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {lvl.targetWeeks}w · {lvl.budgets.wolves} wolves
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-right font-mono">
-                  {isCompleted && score ? (
-                    <div className="flex items-center gap-1.5">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      <span className="text-xs font-bold text-lime-300">
-                        {score.highestSheep} Sheep
+              return (
+                <div
+                  key={entry.id || idx}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                    isCurrentPlayer
+                      ? 'bg-gradient-to-r from-[#1b2b25] to-[#162227] border-lime-500/40 shadow-sm'
+                      : 'bg-[#121a1d] border-slate-800/80'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 flex items-center justify-center">
+                      {getRankBadge(idx)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-bold ${isCurrentPlayer ? 'text-lime-300' : 'text-white'}`}>
+                          {entry.playerName}
+                        </span>
+                        {isCurrentPlayer && (
+                          <span className="text-[9px] bg-lime-500/20 text-lime-400 px-1.5 py-0.2 rounded font-bold uppercase">
+                            You
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <Calendar className="w-2.5 h-2.5" />
+                        {new Date(entry.completedAt).toLocaleDateString()}
                       </span>
                     </div>
-                  ) : (
-                    <span className="text-[11px] text-slate-500">Unbeaten</span>
-                  )}
+                  </div>
+
+                  <div className="text-right font-mono">
+                    <span className="text-xs sm:text-sm font-bold text-sky-400 block">
+                      🐑 {entry.sheepAlive} Alive
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {entry.weeksSurvived}w survived
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
 
         {/* Footer */}
-        <div className="pt-3 border-t border-slate-800 flex justify-end">
+        <div className="pt-3 mt-2 border-t border-slate-800 flex justify-between items-center text-[11px] text-slate-500">
+          <span>Ranked by surviving sheep at deadline</span>
           <button
             onClick={onClose}
             className="px-5 py-2 rounded-lg bg-lime-600 hover:bg-lime-500 text-black font-semibold text-xs transition-all"
           >
-            Close
+            Back to Game
           </button>
         </div>
       </div>

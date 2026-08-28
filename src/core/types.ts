@@ -91,7 +91,7 @@ export interface SimulationSnapshot {
 
 export interface LevelScore {
   levelId: number;
-  highestSheep: number; // Highest sheep alive at the end of the last week
+  highestSheep: number;
   completedAt: string;
 }
 
@@ -99,6 +99,16 @@ export interface PlayerProfile {
   name: string;
   levelScores: Record<number, LevelScore>;
   completedLevels: number[];
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  playerName: string;
+  levelId: number;
+  sheepAlive: number;
+  weeksSurvived: number;
+  completedAt: string;
+  placementMatrix?: number[][]; // 0: Empty, 1: Grass, 2: Sheep, 3: Wolf, 4: Sheep on Grass
 }
 
 export type SimulationStatus = 'placement' | 'running' | 'paused' | 'completed_victory' | 'completed_defeat';

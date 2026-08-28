@@ -240,17 +240,19 @@ export function App() {
       setStatus(outcome === 'victory' ? 'completed_victory' : 'completed_defeat');
       setResultOutcome(outcome);
 
-      // If victory, record high score (surviving sheep count)
+      // If victory, record high score (surviving sheep count) and add to global leaderboard
       if (outcome === 'victory') {
         const { isNewHighScore: isNew, profile: updatedProfile } = recordLevelVictory(
           currentLevel.id,
-          nextSnapshot.aliveSheepCount
+          nextSnapshot.aliveSheepCount,
+          nextSnapshot.week,
+          initialPlacementSnapshot || undefined
         );
         setIsNewHighScore(isNew);
         setProfile(updatedProfile);
       }
     }
-  }, [history, currentLevel]);
+  }, [history, currentLevel, initialPlacementSnapshot]);
 
   // Simulation timer loop
   useEffect(() => {
@@ -399,6 +401,7 @@ export function App() {
         onClose={() => setIsLeaderboardOpen(false)}
         profile={profile}
         onEditName={() => setIsNameModalOpen(true)}
+        initialLevelId={currentLevel.id}
       />
 
       {/* Victory / Defeat Modal */}

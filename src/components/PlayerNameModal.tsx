@@ -23,7 +23,7 @@ export const PlayerNameModal: React.FC<PlayerNameModalProps> = ({
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Please enter your name to begin');
+      setError('Please enter your player name to continue');
       return;
     }
     if (trimmed.length > 20) {
@@ -44,19 +44,19 @@ export const PlayerNameModal: React.FC<PlayerNameModalProps> = ({
 
         {/* Title */}
         <h3 className="text-2xl font-bold text-white mb-1">
-          {isFirstTime ? 'Welcome, Reserve Manager' : 'Change Player Name'}
+          {isFirstTime ? 'Welcome to the Game' : 'Change Player Name'}
         </h3>
         <p className="text-xs text-slate-400 mb-6 leading-relaxed">
           {isFirstTime
-            ? 'Enter your name to track your highest scores and record the surviving species across each level.'
-            : 'Update your name for the high score records.'}
+            ? 'Enter your name to join the global leaderboard and track your highest scores across every level.'
+            : 'Update your name for the leaderboard.'}
         </p>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="text-left">
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
-              Player / Manager Name
+              Player Name
             </label>
             <input
               type="text"
@@ -79,12 +79,12 @@ export const PlayerNameModal: React.FC<PlayerNameModalProps> = ({
             {isFirstTime ? (
               <>
                 <Play className="w-4 h-4 fill-black" />
-                <span>Start Game</span>
+                <span>Join & Play</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4 text-black" />
-                <span>Save Profile</span>
+                <span>Save Name</span>
               </>
             )}
           </button>
