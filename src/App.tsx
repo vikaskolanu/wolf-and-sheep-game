@@ -8,24 +8,38 @@ import {
   SimulationStatus,
   SimulationSnapshot,
   LevelConfig,
+  PlayerProfile,
 } from './core/types';
 import {
   createInitialGrid,
   stepSimulation,
   evaluateSimulationOutcome,
 } from './core/simulation';
+import {
+  getStoredPlayerProfile,
+  savePlayerProfile,
+  recordLevelVictory,
+} from './core/storage';
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
 import { GameBoard } from './components/GameBoard';
 import { LevelObjective } from './components/LevelObjective';
 import { SimulationControls } from './components/SimulationControls';
 import { PopulationChart } from './components/PopulationChart';
-import { RulesModal } from './components/RulesModal';
 import { ResultModal } from './components/ResultModal';
+import { LeaderboardModal } from './components/LeaderboardModal';
+import { PlayerNameModal } from './components/PlayerNameModal';
 
 export function App() {
-  const [levelIndex, setLevelIndex] = useState(4); // Default to Level 5 as shown in screenshot
+  // Start from Level 1 (index 0)
+  const [levelIndex, setLevelIndex] = useState(0);
   const currentLevel: LevelConfig = GAME_LEVELS[levelIndex];
+
+  // Player Profile and Modal state
+  const [profile, setProfile] = useState<PlayerProfile | null>(() => getStoredPlayerProfile());
+  const [isNameModalOpen, setIsNameModalOpen] = useState(() => !getStoredPlayerProfile()?.name);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
+  const [isNewHighScore, setIsNewHighScore] = useState(false);
 
   // Placement state
   const [activeTool, setActiveTool] = useState<ToolType>('grass');
@@ -45,7 +59,6 @@ export function App() {
     wolves: WolfEntity[];
   } | null>(null);
 
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [resultOutcome, setResultOutcome] = useState<'victory' | 'defeat' | null>(null);
 
   const isSimulating = status === 'running' || status === 'paused';
@@ -65,6 +78,7 @@ export function App() {
     setHistory([]);
     setInitialPlacementSnapshot(null);
     setResultOutcome(null);
+    setIsNewHighScore(false);
     setActiveTool('grass');
   }, []);
 
@@ -72,6 +86,22 @@ export function App() {
   const handleSelectLevel = (newIdx: number) => {
     setLevelIndex(newIdx);
     resetLevel(newIdx);
+  };
+
+  // Player name handler
+  const handleSavePlayerName = (name: string) => {
+    const existing = profile || {
+      name,
+      levelScores: {},
+      completedLevels: [],
+    };
+    const updated: PlayerProfile = {
+      ...existing,
+      name,
+    };
+    savePlayerProfile(updated);
+    setProfile(updated);
+    setIsNameModalOpen(false);
   };
 
   // Cell interaction logic during placement
@@ -186,6 +216,7 @@ export function App() {
     setHistory([initialSnapshot]);
     setStatus('running');
     setResultOutcome(null);
+    setIsNewHighScore(false);
   };
 
   // Single step tick
@@ -208,6 +239,16 @@ export function App() {
     if (outcome === 'victory' || outcome === 'defeat') {
       setStatus(outcome === 'victory' ? 'completed_victory' : 'completed_defeat');
       setResultOutcome(outcome);
+
+      // If victory, record high score (surviving sheep count)
+      if (outcome === 'victory') {
+        const { isNewHighScore: isNew, profile: updatedProfile } = recordLevelVictory(
+          currentLevel.id,
+          nextSnapshot.aliveSheepCount
+        );
+        setIsNewHighScore(isNew);
+        setProfile(updatedProfile);
+      }
     }
   }, [history, currentLevel]);
 
@@ -215,7 +256,7 @@ export function App() {
   useEffect(() => {
     if (status !== 'running') return;
 
-    const intervalMs = Math.max(80, 800 / speed);
+    const intervalMs = Math.round(800 / speed);
     const timer = setInterval(() => {
       advanceWeek();
     }, intervalMs);
@@ -237,6 +278,7 @@ export function App() {
     setStatus('placement');
     setHistory([]);
     setResultOutcome(null);
+    setIsNewHighScore(false);
   };
 
   const handleNextLevel = () => {
@@ -247,6 +289,7 @@ export function App() {
 
   const currentWeek = history.length > 0 ? history[history.length - 1].week : 0;
   const currentSnapshot = history.length > 0 ? history[history.length - 1] : null;
+  const currentHighScore = profile?.levelScores[currentLevel.id]?.highestSheep;
 
   return (
     <div className="min-h-screen nature-backdrop flex flex-col text-slate-100 selection:bg-lime-500 selection:text-black">
@@ -254,13 +297,15 @@ export function App() {
       <Header
         currentLevelIndex={levelIndex}
         onSelectLevel={handleSelectLevel}
-        onOpenRules={() => setRulesOpen(true)}
         onResetLevel={() => resetLevel(levelIndex)}
         isSimulating={isSimulating}
+        profile={profile}
+        onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
+        onEditPlayerName={() => setIsNameModalOpen(true)}
       />
 
       {/* Main Workspace Layout */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col justify-between gap-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 md:p-6 flex flex-col justify-between gap-5">
         {/* Top Control Toolbar (Placement Phase) */}
         {!isSimulating ? (
           <div className="flex justify-start">
@@ -278,9 +323,9 @@ export function App() {
             />
           </div>
         ) : (
-          <div className="flex justify-between items-center bg-[#182327]/60 px-4 py-2 rounded-lg border border-[#2b3c43]">
+          <div className="flex justify-between items-center bg-[#182327]/80 px-3.5 py-2 rounded-xl border border-[#2b3c43]">
             <span className="text-xs font-mono text-slate-400">
-              Simulation Active — Week {currentWeek} of {currentLevel.targetWeeks}
+              Week {currentWeek} of {currentLevel.targetWeeks} ({currentLevel.gridRows}×{currentLevel.gridCols})
             </span>
             <div className="flex items-center gap-4 text-xs font-mono">
               <span className="text-sky-300">🐑 {sheep.filter(s => s.isAlive).length} Alive</span>
@@ -290,9 +335,9 @@ export function App() {
         )}
 
         {/* Center Grid & Mission Info Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          {/* Left Column: 5x5 Game Board */}
-          <div className="lg:col-span-7 flex justify-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-center">
+          {/* Left Column: Game Board */}
+          <div className="lg:col-span-7 flex justify-center w-full">
             <GameBoard
               grid={grid}
               sheep={sheep}
@@ -305,11 +350,12 @@ export function App() {
           </div>
 
           {/* Right Column: Mission Objectives, Legend & Population Graph */}
-          <div className="lg:col-span-5 flex flex-col gap-5">
+          <div className="lg:col-span-5 flex flex-col gap-4">
             <LevelObjective
               level={currentLevel}
               currentWeek={currentWeek}
               isSimulating={isSimulating}
+              highScore={currentHighScore}
             />
 
             {/* Live Ecosystem Trend Line Graph */}
@@ -323,7 +369,7 @@ export function App() {
         </div>
 
         {/* Bottom Playback & CTA Controls */}
-        <div className="pt-2">
+        <div className="pt-1">
           <SimulationControls
             level={currentLevel}
             status={status}
@@ -339,8 +385,21 @@ export function App() {
         </div>
       </main>
 
-      {/* Rules Modal */}
-      <RulesModal isOpen={rulesOpen} onClose={() => setRulesOpen(false)} />
+      {/* Player Name Dialog */}
+      <PlayerNameModal
+        isOpen={isNameModalOpen}
+        initialName={profile?.name || ''}
+        onSaveName={handleSavePlayerName}
+        isFirstTime={!profile?.name}
+      />
+
+      {/* Leaderboard / Records Modal */}
+      <LeaderboardModal
+        isOpen={isLeaderboardOpen}
+        onClose={() => setIsLeaderboardOpen(false)}
+        profile={profile}
+        onEditName={() => setIsNameModalOpen(true)}
+      />
 
       {/* Victory / Defeat Modal */}
       {resultOutcome && currentSnapshot && (
@@ -351,6 +410,7 @@ export function App() {
           onRetry={handleResetPlacement}
           onNextLevel={handleNextLevel}
           hasNextLevel={levelIndex < GAME_LEVELS.length - 1}
+          isNewHighScore={isNewHighScore}
         />
       )}
     </div>

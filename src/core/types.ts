@@ -11,9 +11,9 @@ export interface CellState {
   r: number;
   c: number;
   isGrass: boolean;
-  grassGrowth: number; // 0 to 5 (or max)
+  grassGrowth: number;
   grassMaxGrowth: number;
-  grassRegrowCountdown: number; // turns until grass grows back after being eaten
+  grassRegrowCountdown: number;
 }
 
 export interface SheepEntity {
@@ -64,12 +64,12 @@ export interface LevelConfig {
     wolves: number;
   };
   rules: {
-    wolfStarveThreshold: number;   // Weeks without food before wolf dies (default: 4-5)
-    sheepStarveThreshold: number;  // Weeks without grass before sheep dies (default: 1-2)
-    sheepReproInterval: number;    // Weeks on grass before reproducing (default: 4)
-    grassRegrowthInterval: number; // Weeks for grass to replenish after being grazed (default: 3)
-    minSurvivingSheep: number;     // Minimum alive sheep required at targetWeeks to win (default: 1)
-    minSurvivingWolves: number;    // Minimum alive wolves required at targetWeeks to win (default: 1)
+    wolfStarveThreshold: number;
+    sheepStarveThreshold: number;
+    sheepReproInterval: number;
+    grassRegrowthInterval: number;
+    minSurvivingSheep: number;
+    minSurvivingWolves: number;
   };
   preplaced?: {
     grass?: Position[];
@@ -87,6 +87,18 @@ export interface SimulationSnapshot {
   aliveSheepCount: number;
   aliveWolvesCount: number;
   activeGrassCount: number;
+}
+
+export interface LevelScore {
+  levelId: number;
+  highestSheep: number; // Highest sheep alive at the end of the last week
+  completedAt: string;
+}
+
+export interface PlayerProfile {
+  name: string;
+  levelScores: Record<number, LevelScore>;
+  completedLevels: number[];
 }
 
 export type SimulationStatus = 'placement' | 'running' | 'paused' | 'completed_victory' | 'completed_defeat';
