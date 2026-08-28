@@ -3,47 +3,6 @@ import { PlayerProfile, LeaderboardEntry, CellState, SheepEntity, WolfEntity } f
 const PROFILE_STORAGE_KEY = 'ecosystem_player_profile';
 const LEADERBOARD_STORAGE_KEY = 'ecosystem_global_leaderboard';
 
-// Default community / benchmark players on each level
-const DEFAULT_LEADERBOARD: Record<number, LeaderboardEntry[]> = {
-  1: [
-    { id: 'd1_1', playerName: 'ShadowStalker', levelId: 1, sheepAlive: 6, weeksSurvived: 10, completedAt: '2026-08-20T10:00:00Z' },
-    { id: 'd1_2', playerName: 'ForestEcho', levelId: 1, sheepAlive: 5, weeksSurvived: 10, completedAt: '2026-08-22T14:30:00Z' },
-    { id: 'd1_3', playerName: 'GreenPasture', levelId: 1, sheepAlive: 4, weeksSurvived: 10, completedAt: '2026-08-25T08:15:00Z' },
-  ],
-  2: [
-    { id: 'd2_1', playerName: 'AlphaPredator', levelId: 2, sheepAlive: 7, weeksSurvived: 15, completedAt: '2026-08-21T11:00:00Z' },
-    { id: 'd2_2', playerName: 'MeadowGuard', levelId: 2, sheepAlive: 5, weeksSurvived: 15, completedAt: '2026-08-23T16:45:00Z' },
-  ],
-  3: [
-    { id: 'd3_1', playerName: 'BioBalance', levelId: 3, sheepAlive: 9, weeksSurvived: 20, completedAt: '2026-08-22T09:20:00Z' },
-    { id: 'd3_2', playerName: 'LunaWolf', levelId: 3, sheepAlive: 7, weeksSurvived: 20, completedAt: '2026-08-24T18:00:00Z' },
-  ],
-  4: [
-    { id: 'd4_1', playerName: 'SavannaKing', levelId: 4, sheepAlive: 10, weeksSurvived: 25, completedAt: '2026-08-23T12:00:00Z' },
-    { id: 'd4_2', playerName: 'ApexRunner', levelId: 4, sheepAlive: 8, weeksSurvived: 25, completedAt: '2026-08-26T15:30:00Z' },
-  ],
-  5: [
-    { id: 'd5_1', playerName: 'EquilibriumMaster', levelId: 5, sheepAlive: 11, weeksSurvived: 30, completedAt: '2026-08-24T13:40:00Z' },
-    { id: 'd5_2', playerName: 'OmegaPack', levelId: 5, sheepAlive: 9, weeksSurvived: 30, completedAt: '2026-08-27T09:10:00Z' },
-  ],
-  6: [
-    { id: 'd6_1', playerName: 'WildernessSage', levelId: 6, sheepAlive: 8, weeksSurvived: 30, completedAt: '2026-08-25T17:50:00Z' },
-    { id: 'd6_2', playerName: 'SilverFang', levelId: 6, sheepAlive: 6, weeksSurvived: 30, completedAt: '2026-08-27T20:00:00Z' },
-  ],
-  7: [
-    { id: 'd7_1', playerName: 'CorridorStrategist', levelId: 7, sheepAlive: 13, weeksSurvived: 25, completedAt: '2026-08-26T14:10:00Z' },
-  ],
-  8: [
-    { id: 'd8_1', playerName: 'RidgeSurvivor', levelId: 8, sheepAlive: 14, weeksSurvived: 30, completedAt: '2026-08-27T11:25:00Z' },
-  ],
-  9: [
-    { id: 'd9_1', playerName: 'SafariArchitect', levelId: 9, sheepAlive: 16, weeksSurvived: 30, completedAt: '2026-08-28T08:00:00Z' },
-  ],
-  10: [
-    { id: 'd10_1', playerName: 'ApexOverlord', levelId: 10, sheepAlive: 18, weeksSurvived: 35, completedAt: '2026-08-28T16:00:00Z' },
-  ],
-};
-
 export function getStoredPlayerProfile(): PlayerProfile | null {
   try {
     const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
@@ -65,11 +24,19 @@ export function savePlayerProfile(profile: PlayerProfile): void {
 export function getGlobalLeaderboard(): Record<number, LeaderboardEntry[]> {
   try {
     const raw = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
-    if (!raw) return DEFAULT_LEADERBOARD;
+    if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_LEADERBOARD, ...parsed };
+    // Return strictly real user submissions
+    const cleanBoard: Record<number, LeaderboardEntry[]> = {};
+    for (const [key, val] of Object.entries(parsed)) {
+      if (Array.isArray(val)) {
+        // Filter out any mock entries starting with 'd' prefix
+        cleanBoard[Number(key)] = val.filter((e: LeaderboardEntry) => !e.id?.startsWith('d'));
+      }
+    }
+    return cleanBoard;
   } catch {
-    return DEFAULT_LEADERBOARD;
+    return {};
   }
 }
 
@@ -153,7 +120,7 @@ export function recordLevelVictory(
 
   savePlayerProfile(profile);
 
-  // Add to Global Leaderboard for this level
+  // Record only real user submissions
   const globalBoard = getGlobalLeaderboard();
   const levelEntries = globalBoard[levelId] ? [...globalBoard[levelId]] : [];
 
@@ -167,7 +134,7 @@ export function recordLevelVictory(
   }
 
   const newEntry: LeaderboardEntry = {
-    id: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+    id: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
     playerName: profile.name || 'Player',
     levelId,
     sheepAlive,
@@ -177,7 +144,6 @@ export function recordLevelVictory(
   };
 
   levelEntries.push(newEntry);
-  // Sort by highest sheep alive descending, then earliest completed
   levelEntries.sort((a, b) => b.sheepAlive - a.sheepAlive);
 
   globalBoard[levelId] = levelEntries;
