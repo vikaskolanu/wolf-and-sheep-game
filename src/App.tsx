@@ -190,8 +190,12 @@ export function App() {
 
   // Start simulation
   const handleStartSimulation = () => {
-    if (sheep.length === 0 || wolves.length === 0) {
-      alert("Please place at least one sheep and one wolf before running the simulation.");
+    const isGrassFull = placedGrassCount === currentLevel.budgets.grass;
+    const isSheepFull = placedSheepCount === currentLevel.budgets.sheep;
+    const isWolvesFull = placedWolvesCount === currentLevel.budgets.wolves;
+
+    if (!isGrassFull || !isSheepFull || !isWolvesFull) {
+      alert("You must use all available resources (grass patches, sheep, and wolves) before running the simulation.");
       return;
     }
 
@@ -377,6 +381,9 @@ export function App() {
             status={status}
             currentWeek={currentWeek}
             speed={speed}
+            placedGrass={placedGrassCount}
+            placedSheep={placedSheepCount}
+            placedWolves={placedWolvesCount}
             onStart={handleStartSimulation}
             onPause={handlePause}
             onResume={handleResume}

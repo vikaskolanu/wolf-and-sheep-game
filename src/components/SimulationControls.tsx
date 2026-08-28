@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, StepForward, RotateCcw, FastForward } from 'lucide-react';
+import { Play, Pause, StepForward, RotateCcw, FastForward, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { LevelConfig, SimulationStatus } from '../core/types';
 
 interface SimulationControlsProps {
@@ -7,6 +7,9 @@ interface SimulationControlsProps {
   status: SimulationStatus;
   currentWeek: number;
   speed: number;
+  placedGrass: number;
+  placedSheep: number;
+  placedWolves: number;
   onStart: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -20,6 +23,9 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
   status,
   currentWeek,
   speed,
+  placedGrass,
+  placedSheep,
+  placedWolves,
   onStart,
   onPause,
   onResume,
@@ -29,16 +35,69 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
 }) => {
   const isSimulating = status === 'running' || status === 'paused';
 
+  const isGrassFull = placedGrass === level.budgets.grass;
+  const isSheepFull = placedSheep === level.budgets.sheep;
+  const isWolvesFull = placedWolves === level.budgets.wolves;
+  const allResourcesPlaced = isGrassFull && isSheepFull && isWolvesFull;
+
   if (!isSimulating) {
     return (
-      <div className="flex items-center justify-end w-full">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full bg-[#182327]/85 border border-[#2b3c43] p-3 rounded-xl shadow-xl backdrop-blur-md">
+        {/* Resource Allocation Status Helper */}
+        <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+          {!allResourcesPlaced ? (
+            <div className="flex items-center gap-1.5 text-amber-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Use all budget to unlock run:</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-lime-400 font-bold">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>All resources placed! Ready to simulate.</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5">
+            <span className={`px-2 py-0.5 rounded text-[11px] border ${
+              isGrassFull
+                ? 'bg-lime-950/60 text-lime-300 border-lime-500/40'
+                : 'bg-[#12191c] text-slate-400 border-slate-700'
+            }`}>
+              Grass: {placedGrass}/{level.budgets.grass}
+            </span>
+
+            <span className={`px-2 py-0.5 rounded text-[11px] border ${
+              isSheepFull
+                ? 'bg-sky-950/60 text-sky-300 border-sky-500/40'
+                : 'bg-[#12191c] text-slate-400 border-slate-700'
+            }`}>
+              Sheep: {placedSheep}/{level.budgets.sheep}
+            </span>
+
+            <span className={`px-2 py-0.5 rounded text-[11px] border ${
+              isWolvesFull
+                ? 'bg-red-950/60 text-red-300 border-red-500/40'
+                : 'bg-[#12191c] text-slate-400 border-slate-700'
+            }`}>
+              Wolves: {placedWolves}/{level.budgets.wolves}
+            </span>
+          </div>
+        </div>
+
+        {/* Run Button - Greyed out until all resources are placed */}
         <button
           type="button"
+          disabled={!allResourcesPlaced}
           onClick={onStart}
-          className="flex items-center gap-2.5 px-6 py-3 rounded-lg bg-gradient-to-r from-lime-600 to-emerald-600 hover:from-lime-500 hover:to-emerald-500 text-white font-semibold shadow-lg shadow-lime-950/40 hover:shadow-lime-600/30 transition-all transform active:scale-95 text-sm md:text-base border border-lime-400/30"
+          className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-bold text-sm sm:text-base transition-all w-full sm:w-auto shadow-lg ${
+            allResourcesPlaced
+              ? 'bg-gradient-to-r from-lime-500 to-emerald-500 hover:from-lime-400 hover:to-emerald-400 text-black shadow-lime-500/30 hover:scale-[1.02] cursor-pointer active:scale-95 animate-pulse'
+              : 'bg-[#1e2a2f] text-slate-500 border border-slate-700/60 cursor-not-allowed opacity-60'
+          }`}
+          title={allResourcesPlaced ? "Start simulation" : "Place all grass, sheep, and wolves to enable run"}
         >
-          <Play className="w-4 h-4 fill-white" />
-          <span>Run Level {level.id} ({level.targetWeeks} weeks)</span>
+          <Play className={`w-4 h-4 ${allResourcesPlaced ? 'fill-black' : 'fill-slate-500'}`} />
+          <span>Run Level {level.id} ({level.targetWeeks}w)</span>
         </button>
       </div>
     );
