@@ -18,14 +18,23 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
   const [selectedLevelId, setSelectedLevelId] = useState(currentLevelId);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Track which levels have already been fetched this session to avoid repeat 404 spam
+  const fetchedLevels = React.useRef<Set<number>>(new Set());
 
   // Sync selected level with game level if changed
   useEffect(() => {
     setSelectedLevelId(currentLevelId);
   }, [currentLevelId]);
 
-  // Load entries for selected level
-  const loadLeaderboard = async (levelId: number) => {
+  // Load entries for selected level — only hits network if not yet fetched this session
+  const loadLeaderboard = async (levelId: number, forceRefresh = false) => {
+    if (!forceRefresh && fetchedLevels.current.has(levelId)) {
+      // Already fetched — just show local data instantly, no network call
+      const local = getLocalLeaderboard();
+      setEntries([...(local[levelId] || [])].sort((a, b) => b.sheepAlive - a.sheepAlive));
+      return;
+    }
+
     setIsLoading(true);
     // Instant local load first
     const local = getLocalLeaderboard();
@@ -33,12 +42,13 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
       setEntries([...local[levelId]].sort((a, b) => b.sheepAlive - a.sheepAlive));
     }
 
-    // Cloud fetch
+    // Cloud fetch (one time per level per session)
     try {
       const live = await fetchGlobalLevelLeaderboard(levelId);
+      fetchedLevels.current.add(levelId);
       setEntries(live);
-    } catch (e) {
-      // Fallback already loaded
+    } catch {
+      // Fallback already loaded from local
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +84,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({
 
           <button
             type="button"
-            onClick={() => loadLeaderboard(selectedLevelId)}
+            onClick={() => loadLeaderboard(selectedLevelId, true)}
             className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-all"
             title="Refresh latest scores"
           >
