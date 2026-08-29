@@ -47,16 +47,3 @@ npm run build
 ```
 
 ---
-
-## 🌐 Deployment to GitHub Pages
-
-1. Push this repository to GitHub:
-   ```bash
-   git remote add origin <your-github-repo-url>
-   git branch -M main
-   git push -u origin main
-   ```
-2. In your GitHub repository settings:
-   - Go to **Settings** > **Pages**.
-   - Under **Build and deployment** > **Source**, select **GitHub Actions**.
-3. The included GitHub Actions workflow (`.github/workflows/deploy.yml`) will automatically build and deploy the game to your GitHub Pages URL!
