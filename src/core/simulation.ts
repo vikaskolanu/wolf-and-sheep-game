@@ -25,12 +25,11 @@ export function manhattanDist(r1: number, c1: number, r2: number, c2: number): n
 }
 
 /**
- * Assigns each alive wolf to the closest untargeted alive sheep.
- * If multiple wolves want the same sheep, closest wolf gets it, and other wolves target the next closest available sheep.
+ * Assigns each alive wolf to the closest untargeted alive sheep deterministically.
  */
 export function assignWolfTargets(wolves: WolfEntity[], sheep: SheepEntity[]): Map<string, string | null> {
-  const aliveWolves = wolves.filter(w => w.isAlive);
-  const aliveSheep = sheep.filter(s => s.isAlive);
+  const aliveWolves = wolves.filter(w => w.isAlive).sort((a, b) => (a.r !== b.r ? a.r - b.r : a.c - b.c));
+  const aliveSheep = sheep.filter(s => s.isAlive).sort((a, b) => (a.r !== b.r ? a.r - b.r : a.c - b.c));
   const targetMap = new Map<string, string | null>();
 
   if (aliveSheep.length === 0) {
@@ -43,6 +42,8 @@ export function assignWolfTargets(wolves: WolfEntity[], sheep: SheepEntity[]): M
     wolfId: string;
     sheepId: string;
     dist: number;
+    wolfPos: number;
+    sheepPos: number;
   }
 
   const pairs: Pair[] = [];
@@ -52,12 +53,18 @@ export function assignWolfTargets(wolves: WolfEntity[], sheep: SheepEntity[]): M
         wolfId: w.id,
         sheepId: s.id,
         dist: manhattanDist(w.r, w.c, s.r, s.c),
+        wolfPos: w.r * 100 + w.c,
+        sheepPos: s.r * 100 + s.c,
       });
     }
   }
 
-  // Sort pairs by distance ascending
-  pairs.sort((a, b) => a.dist - b.dist);
+  // Sort pairs deterministically: by distance ascending, then wolf position, then sheep position
+  pairs.sort((a, b) => {
+    if (a.dist !== b.dist) return a.dist - b.dist;
+    if (a.wolfPos !== b.wolfPos) return a.wolfPos - b.wolfPos;
+    return a.sheepPos - b.sheepPos;
+  });
 
   const targetedSheepIds = new Set<string>();
   const assignedWolves = new Set<string>();
@@ -70,10 +77,9 @@ export function assignWolfTargets(wolves: WolfEntity[], sheep: SheepEntity[]): M
     }
   }
 
-  // Any remaining wolves that couldn't get a unique sheep target the nearest sheep anyway (or null)
+  // Any remaining wolves target the closest sheep deterministically
   for (const w of aliveWolves) {
     if (!assignedWolves.has(w.id)) {
-      // Find closest sheep even if shared
       let closestSheep: SheepEntity | null = null;
       let minDist = Infinity;
       for (const s of aliveSheep) {
@@ -91,7 +97,7 @@ export function assignWolfTargets(wolves: WolfEntity[], sheep: SheepEntity[]): M
 }
 
 /**
- * Executes a single week simulation tick.
+ * Executes a single week simulation tick (100% deterministic).
  */
 export function stepSimulation(
   currentSnapshot: SimulationSnapshot,
@@ -100,14 +106,19 @@ export function stepSimulation(
   const nextWeek = currentSnapshot.week + 1;
   const events: SimulationEvent[] = [];
 
-  // Deep clone state for next tick
+  // Deep clone current grid state
   const nextGrid: CellState[][] = currentSnapshot.grid.map(row =>
     row.map(cell => ({ ...cell }))
   );
   
-  // Clone entities
-  const nextSheep: SheepEntity[] = currentSnapshot.sheep.map(s => ({ ...s }));
-  const nextWolves: WolfEntity[] = currentSnapshot.wolves.map(w => ({ ...w }));
+  // Clone entities sorted deterministically by position
+  const nextSheep: SheepEntity[] = currentSnapshot.sheep
+    .map(s => ({ ...s }))
+    .sort((a, b) => (a.r !== b.r ? a.r - b.r : a.c - b.c));
+
+  const nextWolves: WolfEntity[] = currentSnapshot.wolves
+    .map(w => ({ ...w }))
+    .sort((a, b) => (a.r !== b.r ? a.r - b.r : a.c - b.c));
 
   // 1. Regrow grass countdowns
   for (let r = 0; r < level.gridRows; r++) {
@@ -127,8 +138,16 @@ export function stepSimulation(
   // Set of wolves that got fed on the spot by a sheep reproducing directly into their cell
   const wolvesFedOnTheSpot = new Set<string>();
 
-  // 2. Sheep Grazing & Reproduction Phase
+  // 2. Sheep Grazing & Reproduction Phase (Every week on grassland)
   const newlySpawnedSheep: SheepEntity[] = [];
+
+  // Fixed deterministic direction priority: Up, Right, Down, Left
+  const DIRECTION_OFFSETS = [
+    { r: -1, c: 0 },
+    { r: 0, c: 1 },
+    { r: 1, c: 0 },
+    { r: 0, c: -1 },
+  ];
 
   for (const sheep of nextSheep) {
     if (!sheep.isAlive) continue;
@@ -141,66 +160,55 @@ export function stepSimulation(
       sheep.fedRecently = true;
       sheep.reproductionCooldown--;
 
-      // All sheep in grasslands reproduce when cooldown reaches 0
+      // Sheep in grasslands reproduce every week when cooldown reaches 0
       if (sheep.reproductionCooldown <= 0) {
-        // Collect all 4 adjacent cells within grid bounds
-        const adjacentCells: { r: number; c: number }[] = [];
-        const directions = [
-          { r: sheep.r - 1, c: sheep.c },
-          { r: sheep.r + 1, c: sheep.c },
-          { r: sheep.r, c: sheep.c - 1 },
-          { r: sheep.r, c: sheep.c + 1 },
-        ];
-
-        for (const dir of directions) {
-          if (dir.r >= 0 && dir.r < level.gridRows && dir.c >= 0 && dir.c < level.gridCols) {
-            adjacentCells.push(dir);
-          }
-        }
-
-        // Categorize adjacent cells (must not already have a sheep)
+        // Collect adjacent directions within grid bounds
         const emptyAdjacentGrass: { r: number; c: number }[] = [];
         const emptyAdjacentLand: { r: number; c: number }[] = [];
         const adjacentWolfCells: { r: number; c: number; wolf: WolfEntity }[] = [];
 
-        for (const dir of adjacentCells) {
-          const isSheepPresent =
-            nextSheep.some(s => s.isAlive && s.r === dir.r && s.c === dir.c) ||
-            newlySpawnedSheep.some(s => s.isAlive && s.r === dir.r && s.c === dir.c);
+        for (const dir of DIRECTION_OFFSETS) {
+          const nr = sheep.r + dir.r;
+          const nc = sheep.c + dir.c;
 
-          if (!isSheepPresent) {
-            const wolfPresent = nextWolves.find(w => w.isAlive && w.r === dir.r && w.c === dir.c);
-            if (wolfPresent) {
-              adjacentWolfCells.push({ r: dir.r, c: dir.c, wolf: wolfPresent });
-            } else if (nextGrid[dir.r][dir.c].isGrass) {
-              emptyAdjacentGrass.push(dir);
-            } else {
-              emptyAdjacentLand.push(dir);
+          if (nr >= 0 && nr < level.gridRows && nc >= 0 && nc < level.gridCols) {
+            const isSheepPresent =
+              nextSheep.some(s => s.isAlive && s.r === nr && s.c === nc) ||
+              newlySpawnedSheep.some(s => s.isAlive && s.r === nr && s.c === nc);
+
+            if (!isSheepPresent) {
+              const wolfPresent = nextWolves.find(w => w.isAlive && w.r === nr && w.c === nc);
+              if (wolfPresent) {
+                adjacentWolfCells.push({ r: nr, c: nc, wolf: wolfPresent });
+              } else if (nextGrid[nr][nc].isGrass) {
+                emptyAdjacentGrass.push({ r: nr, c: nc });
+              } else {
+                emptyAdjacentLand.push({ r: nr, c: nc });
+              }
             }
           }
         }
 
-        // Prefer empty grass > empty land > adjacent wolf cell
+        // Deterministic Priority: First available empty grass > empty land > adjacent wolf cell
         let birthPos: { r: number; c: number } | null = null;
         let targetWolf: WolfEntity | null = null;
 
         if (emptyAdjacentGrass.length > 0) {
-          birthPos = emptyAdjacentGrass[Math.floor(Math.random() * emptyAdjacentGrass.length)];
+          birthPos = emptyAdjacentGrass[0];
         } else if (emptyAdjacentLand.length > 0) {
-          birthPos = emptyAdjacentLand[Math.floor(Math.random() * emptyAdjacentLand.length)];
+          birthPos = emptyAdjacentLand[0];
         } else if (adjacentWolfCells.length > 0) {
-          const picked = adjacentWolfCells[Math.floor(Math.random() * adjacentWolfCells.length)];
-          birthPos = { r: picked.r, c: picked.c };
-          targetWolf = picked.wolf;
+          birthPos = { r: adjacentWolfCells[0].r, c: adjacentWolfCells[0].c };
+          targetWolf = adjacentWolfCells[0].wolf;
         }
 
         if (birthPos) {
           const isBirthOnGrass = nextGrid[birthPos.r][birthPos.c].isGrass;
-          const newSheepId = `sheep_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+          const newSheepId = `sheep_w${nextWeek}_p${sheep.r}_${sheep.c}_to_${birthPos.r}_${birthPos.c}`;
 
           if (targetWolf) {
             // Sheep reproduced into a cell occupied by a wolf:
-            // The wolf eats the sheep on the spot, resets hunger, and does not move this week
+            // The wolf eats the sheep on the spot, resets hunger, and remains in place
             newlySpawnedSheep.push({
               id: newSheepId,
               r: birthPos.r,
@@ -223,7 +231,7 @@ export function stepSimulation(
               c: birthPos.c,
               sourceId: targetWolf.id,
               targetId: newSheepId,
-              message: `Sheep multiplied into wolf's cell at (${birthPos.r + 1}, ${birthPos.c + 1}) — wolf ate it on the spot and remained in place`
+              message: `Sheep multiplied into wolf cell at (${birthPos.r + 1}, ${birthPos.c + 1}) — wolf ate it on the spot and remained in place`
             });
           } else {
             // Normal birth into empty cell
@@ -248,10 +256,10 @@ export function stepSimulation(
             });
           }
 
-          // Reset parent cooldown
+          // Reset parent cooldown (every week)
           sheep.reproductionCooldown = level.rules.sheepReproInterval;
         } else {
-          // No adjacent space to reproduce this week - retry next week
+          // No space to reproduce this week - ready again next week
           sheep.reproductionCooldown = 0;
         }
       }
@@ -280,7 +288,7 @@ export function stepSimulation(
   // Append new born sheep
   nextSheep.push(...newlySpawnedSheep);
 
-  // 3. Assign Wolf Targets & Move Wolves
+  // 3. Assign Wolf Targets & Move Wolves (1 step per week)
   const targetAssignments = assignWolfTargets(nextWolves, nextSheep);
   const claimedWolfPositions = new Set<string>();
 
@@ -307,13 +315,13 @@ export function stepSimulation(
     let ateThisWeek = false;
 
     if (targetSheep) {
-      // Calculate possible steps towards target sheep
+      // Calculate possible single steps towards target sheep
       const dr = targetSheep.r - wolf.r;
       const dc = targetSheep.c - wolf.c;
 
       const candidateMoves: { r: number; c: number }[] = [];
 
-      // Step 1: primary axis
+      // Primary axis step first, then secondary
       if (Math.abs(dr) >= Math.abs(dc) && dr !== 0) {
         candidateMoves.push({ r: wolf.r + (dr > 0 ? 1 : -1), c: wolf.c });
         if (dc !== 0) {
@@ -326,7 +334,7 @@ export function stepSimulation(
         }
       }
 
-      // Find first move that is within bounds and NOT occupied by another wolf
+      // Find first valid move within bounds and NOT occupied by another wolf
       let chosenMove: { r: number; c: number } | null = null;
       for (const move of candidateMoves) {
         if (move.r >= 0 && move.r < level.gridRows && move.c >= 0 && move.c < level.gridCols) {
@@ -387,7 +395,7 @@ export function stepSimulation(
       wolf.starvedWeeks++;
     }
 
-    // Check wolf starvation
+    // Check wolf starvation (dies after 3 weeks without food)
     if (wolf.starvedWeeks >= level.rules.wolfStarveThreshold) {
       wolf.isAlive = false;
       wolf.deathReason = 'starved';
@@ -421,33 +429,34 @@ export function stepSimulation(
 }
 
 /**
- * Checks win or loss conditions for a simulation state at a specific week.
+ * Evaluates simulation outcome at the end of a week.
  */
 export function evaluateSimulationOutcome(
   snapshot: SimulationSnapshot,
   level: LevelConfig
-): 'ongoing' | 'victory' | 'defeat' {
+): 'victory' | 'defeat' | 'in_progress' {
   const { aliveSheepCount, aliveWolvesCount, week } = snapshot;
 
-  // Both species must survive
-  if (aliveSheepCount === 0) {
-    return 'defeat'; // All sheep eaten/starved
+  // Defeat condition 1: All sheep dead
+  if (aliveSheepCount < level.rules.minSurvivingSheep) {
+    return 'defeat';
   }
 
-  if (aliveWolvesCount === 0 && level.rules.minSurvivingWolves > 0) {
-    return 'defeat'; // Wolves starved
+  // Defeat condition 2: All wolves dead before target weeks (predator collapse)
+  if (aliveWolvesCount < level.rules.minSurvivingWolves && week < level.targetWeeks) {
+    return 'defeat';
   }
 
+  // Victory condition: Reached target weeks with both species alive
   if (week >= level.targetWeeks) {
     if (
       aliveSheepCount >= level.rules.minSurvivingSheep &&
       aliveWolvesCount >= level.rules.minSurvivingWolves
     ) {
       return 'victory';
-    } else {
-      return 'defeat';
     }
+    return 'defeat';
   }
 
-  return 'ongoing';
+  return 'in_progress';
 }

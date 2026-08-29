@@ -1,7 +1,18 @@
 import { PlayerProfile, LeaderboardEntry, CellState, SheepEntity, WolfEntity } from './types';
 
-const PROFILE_STORAGE_KEY = 'ecosystem_player_profile';
-const LEADERBOARD_STORAGE_KEY = 'ecosystem_global_leaderboard';
+// Increment this version to wipe stale local storage data across all browsers on next load
+const STORAGE_VERSION = 'v2';
+const PROFILE_STORAGE_KEY = `ecosystem_player_profile_${STORAGE_VERSION}`;
+const LEADERBOARD_STORAGE_KEY = `ecosystem_global_leaderboard_${STORAGE_VERSION}`;
+
+// Global public KVdb bucket for cross-device shared leaderboard across all users
+const CLOUD_BUCKET = 'https://kvdb.io/4y9Hq2mNxR8pT3vL6zWbKa';
+
+// On load, clear any stale data from previous storage versions
+(function clearStaleStorage() {
+  const staleKeys = ['ecosystem_player_profile', 'ecosystem_global_leaderboard', 'ecosystem_player_profile_v1', 'ecosystem_global_leaderboard_v1'];
+  staleKeys.forEach(k => { try { localStorage.removeItem(k); } catch {} });
+})();
 
 export function getStoredPlayerProfile(): PlayerProfile | null {
   try {
@@ -21,17 +32,35 @@ export function savePlayerProfile(profile: PlayerProfile): void {
   }
 }
 
-export function getGlobalLeaderboard(): Record<number, LeaderboardEntry[]> {
+/**
+ * Deduplicates leaderboard entries by player name, keeping strictly the single highest score for each unique player.
+ */
+export function deduplicateLeaderboard(entries: LeaderboardEntry[]): LeaderboardEntry[] {
+  const playerBestMap = new Map<string, LeaderboardEntry>();
+
+  for (const entry of entries) {
+    if (!entry || !entry.playerName) continue;
+    const normalizedName = entry.playerName.trim().toLowerCase();
+    const existing = playerBestMap.get(normalizedName);
+
+    if (!existing || entry.sheepAlive > existing.sheepAlive) {
+      playerBestMap.set(normalizedName, entry);
+    }
+  }
+
+  return Array.from(playerBestMap.values()).sort((a, b) => b.sheepAlive - a.sheepAlive);
+}
+
+export function getLocalLeaderboard(): Record<number, LeaderboardEntry[]> {
   try {
     const raw = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    // Return strictly real user submissions
     const cleanBoard: Record<number, LeaderboardEntry[]> = {};
     for (const [key, val] of Object.entries(parsed)) {
       if (Array.isArray(val)) {
-        // Filter out any mock entries starting with 'd' prefix
-        cleanBoard[Number(key)] = val.filter((e: LeaderboardEntry) => !e.id?.startsWith('d'));
+        const nonMock = val.filter((e: LeaderboardEntry) => !e.id?.startsWith('d'));
+        cleanBoard[Number(key)] = deduplicateLeaderboard(nonMock);
       }
     }
     return cleanBoard;
@@ -40,11 +69,70 @@ export function getGlobalLeaderboard(): Record<number, LeaderboardEntry[]> {
   }
 }
 
-export function saveGlobalLeaderboard(board: Record<number, LeaderboardEntry[]>): void {
+export function saveLocalLeaderboard(board: Record<number, LeaderboardEntry[]>): void {
   try {
-    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(board));
+    const deduplicatedBoard: Record<number, LeaderboardEntry[]> = {};
+    for (const [key, val] of Object.entries(board)) {
+      if (Array.isArray(val)) {
+        deduplicatedBoard[Number(key)] = deduplicateLeaderboard(val);
+      }
+    }
+    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(deduplicatedBoard));
   } catch (e) {
-    console.error('Failed to save global leaderboard:', e);
+    console.error('Failed to save local leaderboard:', e);
+  }
+}
+
+/**
+ * Fetches cross-device cloud leaderboard for a level and merges with local entries, ensuring 1 unique highest entry per player
+ */
+export async function fetchGlobalLevelLeaderboard(levelId: number): Promise<LeaderboardEntry[]> {
+  try {
+    const response = await fetch(`${CLOUD_BUCKET}/leaderboard_lvl_${levelId}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (response.ok) {
+      const cloudEntries: LeaderboardEntry[] = await response.json();
+      if (Array.isArray(cloudEntries)) {
+        const localBoard = getLocalLeaderboard();
+        const localEntries = localBoard[levelId] || [];
+
+        // Merge and deduplicate by player name (keeping highest score per player)
+        const combined = deduplicateLeaderboard([...localEntries, ...cloudEntries]);
+
+        localBoard[levelId] = combined;
+        saveLocalLeaderboard(localBoard);
+        return combined;
+      }
+    }
+  } catch (e) {
+    // Fallback to local on network disconnect
+  }
+
+  const local = getLocalLeaderboard();
+  return deduplicateLeaderboard(local[levelId] || []);
+}
+
+/**
+ * Pushes a new victory entry to the global cloud leaderboard, keeping only the highest score per user
+ */
+export async function syncEntryToCloud(entry: LeaderboardEntry): Promise<void> {
+  try {
+    const currentList = await fetchGlobalLevelLeaderboard(entry.levelId);
+    const combined = deduplicateLeaderboard([entry, ...currentList]);
+
+    // Keep top 50 global entries per level
+    const topEntries = combined.slice(0, 50);
+
+    await fetch(`${CLOUD_BUCKET}/leaderboard_lvl_${entry.levelId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(topEntries),
+    });
+  } catch (e) {
+    console.warn('Could not sync to cloud leaderboard immediately, saved locally:', e);
   }
 }
 
@@ -93,7 +181,7 @@ export function recordLevelVictory(
   sheepAlive: number,
   weeksSurvived: number,
   placementGrid?: { grid: CellState[][]; sheep: SheepEntity[]; wolves: WolfEntity[] }
-): { isNewHighScore: boolean; previousHigh: number; profile: PlayerProfile } {
+): { isNewHighScore: boolean; previousHigh: number; profile: PlayerProfile; entry: LeaderboardEntry } {
   let profile = getStoredPlayerProfile();
   if (!profile) {
     profile = {
@@ -120,9 +208,9 @@ export function recordLevelVictory(
 
   savePlayerProfile(profile);
 
-  // Record only real user submissions
-  const globalBoard = getGlobalLeaderboard();
-  const levelEntries = globalBoard[levelId] ? [...globalBoard[levelId]] : [];
+  // Local record with unique user deduplication
+  const localBoard = getLocalLeaderboard();
+  const levelEntries = localBoard[levelId] ? [...localBoard[levelId]] : [];
 
   let placementMatrix: number[][] | undefined;
   if (placementGrid) {
@@ -134,7 +222,7 @@ export function recordLevelVictory(
   }
 
   const newEntry: LeaderboardEntry = {
-    id: `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    id: `entry_${profile.name.trim().toLowerCase()}_lvl_${levelId}`,
     playerName: profile.name || 'Player',
     levelId,
     sheepAlive,
@@ -143,15 +231,17 @@ export function recordLevelVictory(
     placementMatrix,
   };
 
-  levelEntries.push(newEntry);
-  levelEntries.sort((a, b) => b.sheepAlive - a.sheepAlive);
+  const deduplicatedList = deduplicateLeaderboard([newEntry, ...levelEntries]);
+  localBoard[levelId] = deduplicatedList;
+  saveLocalLeaderboard(localBoard);
 
-  globalBoard[levelId] = levelEntries;
-  saveGlobalLeaderboard(globalBoard);
+  // Trigger background cloud sync across all devices worldwide
+  syncEntryToCloud(newEntry);
 
   return {
     isNewHighScore,
     previousHigh: prevScore,
     profile,
+    entry: newEntry,
   };
 }

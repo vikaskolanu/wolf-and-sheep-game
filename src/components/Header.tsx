@@ -1,6 +1,6 @@
 import React from 'react';
 import { GAME_LEVELS } from '../data/levels';
-import { RefreshCw, Trophy, User } from 'lucide-react';
+import { RefreshCw, User } from 'lucide-react';
 import { PlayerProfile } from '../core/types';
 
 interface HeaderProps {
@@ -9,7 +9,6 @@ interface HeaderProps {
   onResetLevel: () => void;
   isSimulating: boolean;
   profile: PlayerProfile | null;
-  onOpenLeaderboard: () => void;
   onEditPlayerName: () => void;
 }
 
@@ -19,7 +18,6 @@ export const Header: React.FC<HeaderProps> = ({
   onResetLevel,
   isSimulating,
   profile,
-  onOpenLeaderboard,
   onEditPlayerName,
 }) => {
   const completedLevels = profile?.completedLevels || [];
@@ -95,17 +93,6 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <User className="w-3.5 h-3.5 text-lime-400 shrink-0" />
           <span className="truncate">{profile?.name || 'Player'}</span>
-        </button>
-
-        {/* Leaderboard / High Scores Button */}
-        <button
-          type="button"
-          onClick={onOpenLeaderboard}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-300 hover:text-amber-200 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 transition-all shadow-sm"
-          title="View High Scores & Records"
-        >
-          <Trophy className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden xs:inline">Records</span>
         </button>
 
         {/* Reset Placement Button */}

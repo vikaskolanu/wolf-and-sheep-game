@@ -16,7 +16,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 1,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -39,7 +39,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 2,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -62,7 +62,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 3,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -85,7 +85,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 4,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -108,7 +108,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 5,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -131,7 +131,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 6,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -154,7 +154,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 4,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -177,7 +177,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 6,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -200,7 +200,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 7,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,
@@ -223,7 +223,7 @@ export const GAME_LEVELS: LevelConfig[] = [
       wolves: 8,
     },
     rules: {
-      wolfStarveThreshold: 3,
+      wolfStarveThreshold: 4,
       sheepStarveThreshold: 1,
       sheepReproInterval: 2,
       grassRegrowthInterval: 3,

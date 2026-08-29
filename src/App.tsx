@@ -20,6 +20,7 @@ import {
   savePlayerProfile,
   recordLevelVictory,
 } from './core/storage';
+import { recordMLSubmission } from './core/mlLogger';
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
 import { GameBoard } from './components/GameBoard';
@@ -27,7 +28,7 @@ import { LevelObjective } from './components/LevelObjective';
 import { SimulationControls } from './components/SimulationControls';
 import { PopulationChart } from './components/PopulationChart';
 import { ResultModal } from './components/ResultModal';
-import { LeaderboardModal } from './components/LeaderboardModal';
+import { LeaderboardPanel } from './components/LeaderboardPanel';
 import { PlayerNameModal } from './components/PlayerNameModal';
 
 export function App() {
@@ -38,7 +39,6 @@ export function App() {
   // Player Profile and Modal state
   const [profile, setProfile] = useState<PlayerProfile | null>(() => getStoredPlayerProfile());
   const [isNameModalOpen, setIsNameModalOpen] = useState(() => !getStoredPlayerProfile()?.name);
-  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [isNewHighScore, setIsNewHighScore] = useState(false);
 
   // Placement state
@@ -146,13 +146,13 @@ export function App() {
         // Add sheep if budget available and no wolf in cell
         if (placedSheepCount < currentLevel.budgets.sheep) {
           const newSheep: SheepEntity = {
-            id: `sheep_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            id: `sheep_${r}_${c}`,
             r,
             c,
             isAlive: true,
             starvedWeeks: 0,
             fedRecently: grid[r][c].isGrass,
-            reproductionCooldown: 1, // Ready to multiply on grassland
+            reproductionCooldown: 1, // First reproduction on week 1, then every 2 weeks
           };
           setSheep(prev => [...prev, newSheep]);
         }
@@ -168,7 +168,7 @@ export function App() {
         // Add wolf if budget available and no sheep in cell
         if (placedWolvesCount < currentLevel.budgets.wolves) {
           const newWolf: WolfEntity = {
-            id: `wolf_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            id: `wolf_${r}_${c}`,
             r,
             c,
             isAlive: true,
@@ -244,7 +244,22 @@ export function App() {
       setStatus(outcome === 'victory' ? 'completed_victory' : 'completed_defeat');
       setResultOutcome(outcome);
 
-      // If victory, record high score (surviving sheep count) and add to global leaderboard
+      // Always record every run to the ML training dataset (silently, background)
+      if (initialPlacementSnapshot) {
+        recordMLSubmission(
+          profile?.name || 'anonymous',
+          currentLevel,
+          outcome,
+          nextSnapshot.week,
+          nextSnapshot.aliveSheepCount,
+          nextSnapshot.aliveWolvesCount,
+          initialPlacementSnapshot.grid,
+          initialPlacementSnapshot.sheep,
+          initialPlacementSnapshot.wolves
+        );
+      }
+
+      // If victory, record high score and sync to global leaderboard
       if (outcome === 'victory') {
         const { isNewHighScore: isNew, profile: updatedProfile } = recordLevelVictory(
           currentLevel.id,
@@ -256,9 +271,9 @@ export function App() {
         setProfile(updatedProfile);
       }
     }
-  }, [history, currentLevel, initialPlacementSnapshot]);
+  }, [history, currentLevel, initialPlacementSnapshot, profile]);
 
-  // Simulation timer loop
+  // Simulation timer loop (controls the visual playback speed only)
   useEffect(() => {
     if (status !== 'running') return;
 
@@ -306,12 +321,11 @@ export function App() {
         onResetLevel={() => resetLevel(levelIndex)}
         isSimulating={isSimulating}
         profile={profile}
-        onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
         onEditPlayerName={() => setIsNameModalOpen(true)}
       />
 
       {/* Main Workspace Layout */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5 md:p-6 flex flex-col justify-between gap-5">
+      <main className="flex-1 max-w-[1440px] w-full mx-auto p-3 sm:p-4 md:p-5 flex flex-col justify-between gap-4">
         {/* Top Control Toolbar (Placement Phase) */}
         {!isSimulating ? (
           <div className="flex justify-start">
@@ -340,10 +354,10 @@ export function App() {
           </div>
         )}
 
-        {/* Center Grid & Mission Info Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-center">
+        {/* 3-Column Layout: Board | Mission & Chart | Live Right-Side Leaderboard */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* Left Column: Game Board */}
-          <div className="lg:col-span-7 flex justify-center w-full">
+          <div className="lg:col-span-5 flex justify-center w-full">
             <GameBoard
               grid={grid}
               sheep={sheep}
@@ -355,8 +369,8 @@ export function App() {
             />
           </div>
 
-          {/* Right Column: Mission Objectives, Legend & Population Graph */}
-          <div className="lg:col-span-5 flex flex-col gap-4">
+          {/* Center Column: Mission Objectives, Legend & Population Graph */}
+          <div className="lg:col-span-4 flex flex-col gap-3.5">
             <LevelObjective
               level={currentLevel}
               currentWeek={currentWeek}
@@ -371,6 +385,15 @@ export function App() {
                 targetWeeks={currentLevel.targetWeeks}
               />
             )}
+          </div>
+
+          {/* Right Column: Global Cross-Device Live Leaderboard Panel */}
+          <div className="lg:col-span-3 w-full">
+            <LeaderboardPanel
+              currentLevelId={currentLevel.id}
+              profile={profile}
+              onEditName={() => setIsNameModalOpen(true)}
+            />
           </div>
         </div>
 
@@ -400,15 +423,6 @@ export function App() {
         initialName={profile?.name || ''}
         onSaveName={handleSavePlayerName}
         isFirstTime={!profile?.name}
-      />
-
-      {/* Leaderboard / Records Modal */}
-      <LeaderboardModal
-        isOpen={isLeaderboardOpen}
-        onClose={() => setIsLeaderboardOpen(false)}
-        profile={profile}
-        onEditName={() => setIsNameModalOpen(true)}
-        initialLevelId={currentLevel.id}
       />
 
       {/* Victory / Defeat Modal */}
