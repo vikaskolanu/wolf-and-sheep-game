@@ -1,6 +1,5 @@
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { MLSubmissionRecord } from './mlTypes';
 import { CellState, SheepEntity, WolfEntity, LevelConfig } from './types';
 
 /**
@@ -77,6 +76,8 @@ function encodePlacement(
 /**
  * Records every simulation run (win or lose) silently in the background.
  * Called automatically when any run ends.
+ * Note: Firestore doesn't support nested arrays — all matrices are flattened to 1D.
+ * Reconstruct in Python with: np.array(flat).reshape(gridRows, gridCols)
  */
 export async function recordMLSubmission(
   playerName: string,
@@ -98,17 +99,21 @@ export async function recordMLSubmission(
 
     const score = computeScore(outcome, weeksSurvived, finalAliveSheep, finalAliveWolves, level);
 
-    const record: MLSubmissionRecord = {
+    // Firestore doesn't allow nested arrays — flatten all 2D matrices to 1D
+    const record = {
       submissionId: `${playerName.trim().toLowerCase()}_lvl${level.id}_${Date.now()}`,
       playerName: playerName || 'anonymous',
       levelId: level.id,
       gridRows: level.gridRows,
       gridCols: level.gridCols,
       targetWeeks: level.targetWeeks,
-      placementMatrix,
-      oneHotGrass,
-      oneHotSheep,
-      oneHotWolf,
+
+      // Flattened 1D arrays — reshape in Python: np.array(flat).reshape(gridRows, gridCols)
+      placementMatrixFlat: placementMatrix.flat(),
+      oneHotGrassFlat: oneHotGrass.flat(),
+      oneHotSheepFlat: oneHotSheep.flat(),
+      oneHotWolfFlat: oneHotWolf.flat(),
+
       outcome,
       weeksSurvived,
       finalAliveSheep,

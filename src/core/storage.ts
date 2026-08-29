@@ -93,6 +93,12 @@ export async function fetchGlobalLevelLeaderboard(levelId: number): Promise<Lead
       headers: { 'Accept': 'application/json' },
     });
 
+    // 404 = no scores posted yet for this level — treat as empty, not an error
+    if (response.status === 404) {
+      const local = getLocalLeaderboard();
+      return deduplicateLeaderboard(local[levelId] || []);
+    }
+
     if (response.ok) {
       const cloudEntries: LeaderboardEntry[] = await response.json();
       if (Array.isArray(cloudEntries)) {
