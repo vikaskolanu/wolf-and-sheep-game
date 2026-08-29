@@ -58,21 +58,10 @@ An interactive, deterministic cellular automaton puzzle and ecosystem simulation
 
 ---
 
-## 🏆 Global Leaderboard & ML Dataset Collection
+## 🏆 Global Leaderboard & Machine Learning
 
-- **Cross-Device Cloud Leaderboard**: Real-time persistent right-side panel powered by Firebase Firestore, ranking players across devices with **1 unique highest score per player**.
-- **Deep Learning / ANN Data Collection**: Automatically logs every run (victory or defeat) with 1D flattened spatial tensors and continuous fitness score $S \in [0, 100]$ to Firestore to train future AI heuristic solvers.
-
----
-
-## 🤖 Built-in Genetic Algorithm Solver
-
-The repository includes automated simulation solvers in `scripts/`:
-
-```bash
-# Run Genetic Algorithm to solve and verify all 7 levels
-node scripts/solve_exact_engine.js
-```
+- **Global Cloud Leaderboard**: Real-time persistent right-side panel that displays the single highest score for each unique player per level.
+- **Machine Learning Data**: Each player's submission data (placement configuration, survival weeks, and outcome) is recorded to train an ML model.
 
 ---
 
