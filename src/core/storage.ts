@@ -1,3 +1,5 @@
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from './firebase';
 import { PlayerProfile, LeaderboardEntry, CellState, SheepEntity, WolfEntity } from './types';
 
 // Increment this version to wipe stale local storage data across all browsers on next load
@@ -5,13 +7,19 @@ const STORAGE_VERSION = 'v2';
 const PROFILE_STORAGE_KEY = `ecosystem_player_profile_${STORAGE_VERSION}`;
 const LEADERBOARD_STORAGE_KEY = `ecosystem_global_leaderboard_${STORAGE_VERSION}`;
 
-// Global public KVdb bucket for cross-device shared leaderboard across all users
-const CLOUD_BUCKET = 'https://kvdb.io/4y9Hq2mNxR8pT3vL6zWbKa';
-
 // On load, clear any stale data from previous storage versions
 (function clearStaleStorage() {
-  const staleKeys = ['ecosystem_player_profile', 'ecosystem_global_leaderboard', 'ecosystem_player_profile_v1', 'ecosystem_global_leaderboard_v1'];
-  staleKeys.forEach(k => { try { localStorage.removeItem(k); } catch {} });
+  const staleKeys = [
+    'ecosystem_player_profile',
+    'ecosystem_global_leaderboard',
+    'ecosystem_player_profile_v1',
+    'ecosystem_global_leaderboard_v1',
+  ];
+  staleKeys.forEach(k => {
+    try {
+      localStorage.removeItem(k);
+    } catch {}
+  });
 })();
 
 export function getStoredPlayerProfile(): PlayerProfile | null {
@@ -84,23 +92,16 @@ export function saveLocalLeaderboard(board: Record<number, LeaderboardEntry[]>):
 }
 
 /**
- * Fetches cross-device cloud leaderboard for a level and merges with local entries, ensuring 1 unique highest entry per player
+ * Fetches cross-device global leaderboard from Firestore and merges with local entries
  */
 export async function fetchGlobalLevelLeaderboard(levelId: number): Promise<LeaderboardEntry[]> {
   try {
-    const response = await fetch(`${CLOUD_BUCKET}/leaderboard_lvl_${levelId}`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-    });
+    const docRef = doc(db, 'leaderboards', `lvl_${levelId}`);
+    const docSnap = await getDoc(docRef);
 
-    // 404 = no scores posted yet for this level — treat as empty, not an error
-    if (response.status === 404) {
-      const local = getLocalLeaderboard();
-      return deduplicateLeaderboard(local[levelId] || []);
-    }
-
-    if (response.ok) {
-      const cloudEntries: LeaderboardEntry[] = await response.json();
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const cloudEntries = (data?.entries || []) as LeaderboardEntry[];
       if (Array.isArray(cloudEntries)) {
         const localBoard = getLocalLeaderboard();
         const localEntries = localBoard[levelId] || [];
@@ -122,21 +123,25 @@ export async function fetchGlobalLevelLeaderboard(levelId: number): Promise<Lead
 }
 
 /**
- * Pushes a new victory entry to the global cloud leaderboard, keeping only the highest score per user
+ * Pushes a new victory entry to the Firestore global leaderboard
  */
 export async function syncEntryToCloud(entry: LeaderboardEntry): Promise<void> {
   try {
     const currentList = await fetchGlobalLevelLeaderboard(entry.levelId);
     const combined = deduplicateLeaderboard([entry, ...currentList]);
 
-    // Keep top 50 global entries per level
-    const topEntries = combined.slice(0, 50);
+    // Keep top 50 global entries per level and strip any nested matrix to avoid Firestore array errors
+    const topEntries = combined.slice(0, 50).map(e => ({
+      id: e.id,
+      playerName: e.playerName,
+      levelId: e.levelId,
+      sheepAlive: e.sheepAlive,
+      weeksSurvived: e.weeksSurvived,
+      completedAt: e.completedAt,
+    }));
 
-    await fetch(`${CLOUD_BUCKET}/leaderboard_lvl_${entry.levelId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(topEntries),
-    });
+    const docRef = doc(db, 'leaderboards', `lvl_${entry.levelId}`);
+    await setDoc(docRef, { entries: topEntries, updatedAt: new Date().toISOString() });
   } catch (e) {
     console.warn('Could not sync to cloud leaderboard immediately, saved locally:', e);
   }
